@@ -1,5 +1,5 @@
 """
-Text message API.
+Message API.
 """
 
 from __future__ import annotations
@@ -12,10 +12,6 @@ from pydantic import BaseModel
 
 from server.database import database
 from server.websocket import manager
-
-
-
-
 
 
 router = APIRouter(
@@ -41,7 +37,10 @@ async def get_messages():
                 id,
                 sender_id,
                 receiver_id,
+                receiver_id,
+                message_type,
                 content,
+                status,
                 created_at
             FROM messages
             ORDER BY created_at ASC
@@ -54,9 +53,15 @@ async def get_messages():
 @router.post("")
 async def create_message(request: CreateMessageRequest):
 
-    message_id = str(uuid.uuid4())
-
-    created_at = datetime.now(UTC).isoformat()
+    message = {
+        "id": str(uuid.uuid4()),
+        "sender_id": request.sender_id,
+        "receiver_id": request.receiver_id,
+        "message_type": "text",
+        "content": request.content,
+        "status": "sent",
+        "created_at": datetime.now(UTC).isoformat(),
+    }
 
     with database.connection() as connection:
 
@@ -75,17 +80,21 @@ async def create_message(request: CreateMessageRequest):
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                message_id,
-                request.sender_id,
-                request.receiver_id,
-                "text",
-                request.content,
-                "sent",
-                created_at,
+                message["id"],
+                message["sender_id"],
+                message["receiver_id"],
+                message["message_type"],
+                message["content"],
+                message["status"],
+                message["created_at"],
             ),
         )
 
-    return {
-        "success": True,
-        "id": message_id,
-    }
+    await manager.broadcast(
+        {
+            "type": "new_message",
+            "message": message,
+        }
+    )
+
+    return message
