@@ -3,11 +3,16 @@
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
 
     <title>Local Chat File Sharing</title>
 
+
+
+    <link rel="icon" href="favicon.ico">
+    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
+    <meta name="theme-color" content="#181b22">
+    
     <link rel="manifest" href="manifest.json">
 
     <link rel="stylesheet" href="css/style.css">
@@ -21,10 +26,7 @@
 
             <div class="device">
 
-                <img
-                    src="assets/avatars/windows.png"
-                    alt="Windows PC"
-                    class="avatar">
+                <img src="assets/avatars/windows.png" alt="Windows PC" class="avatar">
 
                 <div class="device-info">
                     <h1>Shop PC</h1>
@@ -38,9 +40,7 @@
         </header>
 
 
-        <main
-            id="chat"
-            class="chat">
+        <main id="chat" class="chat">
 
             <!-- Messages appear here -->
 
@@ -49,26 +49,15 @@
 
         <footer class="composer">
 
-            <button
-                id="attach-button"
-                class="icon-button"
-                type="button"
-                title="Attach">
+            <button id="attach-button" class="icon-button" type="button" title="Attach">
 
                 +
 
             </button>
 
-            <input
-                id="message-input"
-                type="text"
-                placeholder="Type a message..."
-                autocomplete="off">
+            <input id="message-input" type="text" placeholder="Type a message..." autocomplete="off">
 
-            <button
-                id="send-button"
-                class="send-button"
-                type="button">
+            <button id="send-button" class="send-button" type="button">
 
                 Send
 
@@ -78,11 +67,7 @@
 
     </div>
 
-    <input
-        id="file-input"
-        type="file"
-        hidden
-        multiple>
+    <input id="file-input" type="file" hidden multiple>
 
     <script src="js/app.js"></script>
 
