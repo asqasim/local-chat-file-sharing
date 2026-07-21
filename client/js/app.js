@@ -1,57 +1,241 @@
 "use strict";
 
-class LocalShareApp {
+/*
+=========================================================
+LocalShare
+Application Controller
+=========================================================
+*/
+
+class App {
 
     constructor() {
 
-        this.elements = {
+        this.device = this.detectDevice();
 
-            chat: document.getElementById("chat"),
-
-            messageInput: document.getElementById("message-input"),
-
-            sendButton: document.getElementById("send-button"),
-
-            attachButton: document.getElementById("attach-button"),
-
-            fileInput: document.getElementById("file-input"),
-
-            connectionStatus: document.getElementById("connection-status"),
-        };
+        this.socketConnected = false;
 
     }
 
     async initialize() {
 
-        await this.registerServiceWorker();
-
-        socket.connect();
-        await window.chat.load();
-
-        setInterval(
-            () => socket.sendHeartbeat(),
-            30000,
+        console.log(
+            `Starting LocalShare (${this.device})`
         );
 
-        this.registerEventListeners();
+        ui.initialize();
 
-        this.startHealthMonitor();
+        await this.registerServiceWorker();
+
+        this.registerEvents();
+
+        socket.connect();
+
+        await this.loadMessages();
+
+    }
+
+    registerEvents() {
+
+        const sendButton =
+            document.getElementById(
+                "send-button"
+            );
+
+        const messageInput =
+            document.getElementById(
+                "message-input"
+            );
+
+        const attachButton =
+            document.getElementById(
+                "attach-button"
+            );
+
+        const fileInput =
+            document.getElementById(
+                "file-input"
+            );
+
+        sendButton.addEventListener(
+            "click",
+            () => this.sendMessage()
+        );
+
+        messageInput.addEventListener(
+            "keydown",
+            (event) => {
+
+                if (event.key === "Enter") {
+
+                    event.preventDefault();
+
+                    this.sendMessage();
+
+                }
+
+            }
+        );
+
+        attachButton.addEventListener(
+            "click",
+            () => fileInput.click()
+        );
+
+        fileInput.addEventListener(
+            "change",
+            (event) => {
+
+                if (
+                    event.target.files.length === 0
+                ) {
+
+                    return;
+
+                }
+
+                ui.showToast(
+                    "File upload coming next."
+                );
+
+            }
+        );
+
+    }
+
+    async sendMessage() {
+
+        const input =
+            document.getElementById(
+                "message-input"
+            );
+
+        const text =
+            input.value.trim();
+
+        if (!text) {
+
+            return;
+
+        }
+
+        try {
+
+            await fetch(
+                "/api/messages",
+                {
+
+                    method: "POST",
+
+                    headers: {
+
+                        "Content-Type":
+                            "application/json"
+
+                    },
+
+                    body: JSON.stringify({
+
+                        sender_id:
+                            this.device,
+
+                        receiver_id:
+                            this.device === "windows"
+                                ? "android"
+                                : "windows",
+
+                        content: text
+
+                    })
+
+                }
+            );
+
+            input.value = "";
+
+        }
+        catch (error) {
+
+            console.error(error);
+
+            ui.showToast(
+                "Unable to send message."
+            );
+
+        }
+
+    }
+
+    async loadMessages() {
+
+        try {
+
+            const response =
+                await fetch(
+                    "/api/messages"
+                );
+
+            const messages =
+                await response.json();
+
+            ui.renderMessages(
+                messages
+            );
+
+        }
+        catch (error) {
+
+            console.error(error);
+
+            ui.showToast(
+                "Unable to load chat."
+            );
+
+        }
+
+    }
+
+    detectDevice() {
+
+        const agent =
+            navigator.userAgent.toLowerCase();
+
+        if (
+
+            /android|iphone|ipad/.test(agent)
+
+        ) {
+
+            return "android";
+
+        }
+
+        return "windows";
 
     }
 
     async registerServiceWorker() {
 
-        if (!("serviceWorker" in navigator)) {
+        if (
+
+            !("serviceWorker" in navigator)
+
+        ) {
+
             return;
+
         }
 
         try {
 
-            await navigator.serviceWorker.register(
-                "/service-worker.js"
-            );
+            await navigator
+                .serviceWorker
+                .register(
+                    "/service-worker.js"
+                );
 
-        } catch (error) {
+        }
+        catch (error) {
 
             console.error(error);
 
@@ -59,91 +243,18 @@ class LocalShareApp {
 
     }
 
-    registerEventListeners() {
-
-        this.elements.sendButton.addEventListener(
-            "click",
-            () => this.sendMessage()
-        );
-
-        this.elements.attachButton.addEventListener(
-            "click",
-            () => this.elements.fileInput.click()
-        );
-
-        this.elements.messageInput.addEventListener(
-            "keydown",
-            (event) => {
-
-                if (event.key === "Enter") {
-                    this.sendMessage();
-                }
-
-            }
-        );
-
-    }
-
-    async startHealthMonitor() {
-
-        await this.checkHealth();
-
-        setInterval(
-            () => this.checkHealth(),
-            CONFIG.HEALTH_CHECK_INTERVAL
-        );
-
-    }
-
-    async checkHealth() {
-
-        try {
-
-            await api.health();
-
-            this.setConnectionStatus("Connected");
-
-        }
-
-        catch {
-
-            this.setConnectionStatus("Waiting for PC...");
-
-        }
-
-    }
-
-    async sendMessage() {
-
-        const text =
-            this.elements.messageInput.value.trim();
-
-        if (!text) {
-            return;
-        }
-
-        await window.chat.send(text);
-
-        this.elements.messageInput.value = "";
-
-    }
-
-    setConnectionStatus(status) {
-
-        this.elements.connectionStatus.textContent =
-            status;
-
-    }
-
 }
 
-window.addEventListener(
-    "DOMContentLoaded",
-    async () => {
+const app = new App();
 
-        const app = new LocalShareApp();
+window.addEventListener(
+
+    "DOMContentLoaded",
+
+    async () => {
 
         await app.initialize();
 
     }
+
 );

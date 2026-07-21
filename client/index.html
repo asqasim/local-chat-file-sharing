@@ -2,78 +2,322 @@
 <html lang="en">
 
 <head>
+
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 
     <title>Local Chat File Sharing</title>
 
+    <meta name="theme-color" content="#ffffff">
 
+    <link rel="manifest" href="/manifest.json">
+    <link rel="icon" href="/icons/favicon.ico">
 
-    <link rel="icon" href="favicon.ico">
-    <link rel="apple-touch-icon" href="assets/icons/apple-touch-icon.png">
-    <meta name="theme-color" content="#181b22">
+    <link rel="stylesheet" href="/css/style.css">
 
-    <link rel="manifest" href="manifest.json">
-
-    <link rel="stylesheet" href="css/style.css">
 </head>
 
 <body>
 
-    <div class="app">
+<div id="app">
 
-        <header class="topbar">
+    <!-- ================= Sidebar (Desktop) ================= -->
 
-            <div class="device">
+    <aside id="sidebar">
 
-                <img src="assets/avatars/windows.png" alt="Windows PC" class="avatar">
+        <div class="sidebar-header">
 
-                <div class="device-info">
-                    <h1>Shop PC</h1>
-                    <p id="connection-status">
-                        Connecting...
-                    </p>
-                </div>
+            <div class="app-logo">
+                LS
+            </div>
+
+            <div>
+
+                <h1>LocalShare</h1>
+
+                <p>LAN Messenger</p>
 
             </div>
 
+        </div>
+
+        <nav class="sidebar-nav">
+
+            <button class="nav-button active"
+                    data-page="chat">
+
+                💬
+
+                <span>Chat</span>
+
+            </button>
+
+            <button class="nav-button"
+                    data-page="files">
+
+                📁
+
+                <span>Files</span>
+
+            </button>
+
+            <button class="nav-button"
+                    data-page="media">
+
+                🖼
+
+                <span>Media</span>
+
+            </button>
+
+            <button class="nav-button"
+                    data-page="devices">
+
+                💻
+
+                <span>Devices</span>
+
+            </button>
+
+            <button class="nav-button"
+                    data-page="settings">
+
+                ⚙
+
+                <span>Settings</span>
+
+            </button>
+
+        </nav>
+
+        <div class="sidebar-footer">
+
+            <div class="device-avatar">
+
+                PC
+
+            </div>
+
+            <div>
+
+                <strong>Windows PC</strong>
+
+                <small id="connection-status">
+                    Connecting...
+                </small>
+
+            </div>
+
+        </div>
+
+    </aside>
+
+    <!-- ================= Main ================= -->
+
+    <main id="main-content">
+
+        <!-- Top Bar -->
+
+        <header id="topbar">
+
+            <div>
+
+                <h2 id="page-title">
+
+                    Chat
+
+                </h2>
+
+                <small id="page-subtitle">
+
+                    Local Wi-Fi Messaging
+
+                </small>
+
+            </div>
+
+            <button id="pair-button">
+
+                Pair Device
+
+            </button>
+
         </header>
 
+        <!-- ================= Chat ================= -->
 
-        <main id="chat" class="chat">
+        <section
+                id="chat-page"
+                class="page active-page">
 
-            <!-- Messages appear here -->
+            <div id="chat">
 
-        </main>
+            </div>
 
+            <footer id="composer">
 
-        <footer class="composer">
+                <button
+                        id="attach-button"
+                        type="button">
 
-            <button id="attach-button" class="icon-button" type="button" title="Attach">
+                    📎
 
-                +
+                </button>
+
+                <input
+                        id="message-input"
+                        autocomplete="off"
+                        placeholder="Type a message...">
+
+                <button
+                        id="send-button"
+                        type="button">
+
+                    ➤
+
+                </button>
+
+                <input
+                        id="file-input"
+                        hidden
+                        type="file">
+
+            </footer>
+
+        </section>
+
+        <!-- ================= Files ================= -->
+
+        <section
+                id="files-page"
+                class="page">
+
+            <div class="page-header">
+
+                <h2>Files</h2>
+
+                <input
+                        type="search"
+                        placeholder="Search files...">
+
+            </div>
+
+            <div class="placeholder">
+
+                <h3>No files yet</h3>
+
+                <p>Shared files will appear here.</p>
+
+            </div>
+
+        </section>
+
+        <!-- ================= Media ================= -->
+
+        <section
+                id="media-page"
+                class="page">
+
+            <div class="page-header">
+
+                <h2>Media</h2>
+
+            </div>
+
+            <div class="placeholder">
+
+                <h3>No media</h3>
+
+                <p>Images and videos will be shown here.</p>
+
+            </div>
+
+        </section>
+
+        <!-- ================= Devices ================= -->
+
+        <section
+                id="devices-page"
+                class="page">
+
+            <div class="page-header">
+
+                <h2>Devices</h2>
+
+            </div>
+
+            <div id="device-list">
+
+            </div>
+
+            <button id="add-device-button">
+
+                + Pair New Device
 
             </button>
 
-            <input id="message-input" type="text" placeholder="Type a message..." autocomplete="off">
+        </section>
 
-            <button id="send-button" class="send-button" type="button">
+        <!-- ================= Settings ================= -->
 
-                Send
+        <section
+                id="settings-page"
+                class="page">
 
-            </button>
+            <div class="page-header">
 
-        </footer>
+                <h2>Settings</h2>
 
-    </div>
+            </div>
 
-    <input id="file-input" type="file" hidden multiple>
+            <div class="placeholder">
 
-<script src="js/constants.js"></script>
-<script src="js/api.js"></script>
-<script src="js/chat.js"></script>
-<script src="js/socket.js"></script>
-<script src="js/app.js"></script>
+                <p>Appearance</p>
+
+                <p>Downloads</p>
+
+                <p>Network</p>
+
+                <p>Storage</p>
+
+                <p>Security</p>
+
+            </div>
+
+        </section>
+
+    </main>
+
+</div>
+
+<!-- ================= Mobile Navigation ================= -->
+
+<nav id="mobile-nav">
+
+    <button data-page="chat">💬</button>
+
+    <button data-page="files">📁</button>
+
+    <button data-page="media">🖼</button>
+
+    <button data-page="devices">💻</button>
+
+    <button data-page="settings">⚙</button>
+
+</nav>
+
+<!-- ================= Overlay ================= -->
+
+<div id="modal-root"></div>
+
+<div id="toast-root"></div>
+
+<script src="/js/utils.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/socket.js"></script>
+<script src="/js/ui.js"></script>
+<script src="/js/app.js"></script>
 
 </body>
 

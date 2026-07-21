@@ -18,20 +18,26 @@ class SocketClient {
 
         this.socket = new WebSocket(url);
 
-        this.socket.onopen = () => {
-            console.log("WebSocket connected.");
-        };
+this.socket.onopen = () => {
 
-        this.socket.onclose = () => {
+    document.getElementById(
+        "connection-status"
+    ).textContent = "Connected";
 
-            console.log("WebSocket disconnected.");
+};
 
-            setTimeout(
-                () => this.connect(),
-                3000,
-            );
+this.socket.onclose = () => {
 
-        };
+    document.getElementById(
+        "connection-status"
+    ).textContent = "Disconnected";
+
+    setTimeout(
+        () => this.connect(),
+        3000,
+    );
+
+};
 
         this.socket.onerror = (error) => {
             console.error(error);
