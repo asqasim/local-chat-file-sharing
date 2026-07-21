@@ -8,11 +8,20 @@ class Chat {
 
     async load() {
 
-        const response = await fetch("/api/messages");
+        try {
 
-        const messages = await response.json();
+            const response = await fetch("/api/messages");
 
-        this.render(messages);
+            const messages = await response.json();
+
+            this.render(messages);
+
+        }
+        catch (error) {
+
+            console.error("Failed to load messages.", error);
+
+        }
 
     }
 
@@ -22,49 +31,67 @@ class Chat {
 
         for (const message of messages) {
 
-            const bubble =
-                document.createElement("div");
+            const bubble = document.createElement("div");
 
-            bubble.className = "message";
+            bubble.classList.add("message");
 
-            bubble.textContent =
-                message.content;
+            if (message.sender_id === "windows") {
+                bubble.classList.add("message-outgoing");
+            }
+            else {
+                bubble.classList.add("message-incoming");
+            }
+
+            bubble.textContent = message.content;
 
             this.container.appendChild(bubble);
 
         }
+
+        this.scrollToBottom();
+
+    }
+
+    async send(text, sender = "windows", receiver = "android") {
+
+        if (!text.trim()) {
+            return;
+        }
+
+        try {
+
+            await fetch("/api/messages", {
+                method: "POST",
+
+                headers: {
+                    "Content-Type": "application/json",
+                },
+
+                body: JSON.stringify({
+                    sender_id: sender,
+                    receiver_id: receiver,
+                    content: text,
+                }),
+            });
+
+        }
+        catch (error) {
+
+            console.error("Failed to send message.", error);
+
+        }
+
+    }
+
+    scrollToBottom() {
 
         this.container.scrollTop =
             this.container.scrollHeight;
 
     }
 
-    async send(text) {
-
-        await fetch(
-            "/api/messages",
-            {
-                method: "POST",
-
-                headers: {
-                    "Content-Type":
-                        "application/json"
-                },
-
-                body: JSON.stringify({
-
-                    sender_id: "android",
-
-                    receiver_id: "windows",
-
-                    content: text
-
-                })
-            }
-        );
-
-        await this.load();
-
-    }
-
 }
+
+window.chat = new Chat(
+    document.getElementById("chat")
+);

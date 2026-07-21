@@ -25,9 +25,18 @@ class LocalShareApp {
 
         await this.registerServiceWorker();
 
+        socket.connect();
+        await window.chat.load();
+
+        setInterval(
+            () => socket.sendHeartbeat(),
+            30000,
+        );
+
         this.registerEventListeners();
 
         this.startHealthMonitor();
+
     }
 
     async registerServiceWorker() {
@@ -104,16 +113,16 @@ class LocalShareApp {
 
     }
 
-    sendMessage() {
+    async sendMessage() {
 
-        const message =
+        const text =
             this.elements.messageInput.value.trim();
 
-        if (!message) {
+        if (!text) {
             return;
         }
 
-        console.log(message);
+        await window.chat.send(text);
 
         this.elements.messageInput.value = "";
 

@@ -218,3 +218,41 @@ button {
 ::-webkit-scrollbar-track {
     background: transparent;
 }
+
+/* ----------------------------- */
+/* Messages                      */
+/* ----------------------------- */
+
+.message {
+
+    max-width: 70%;
+
+    padding: 12px 16px;
+
+    border-radius: 16px;
+
+    word-break: break-word;
+
+    line-height: 1.4;
+
+}
+
+.message-incoming {
+
+    align-self: flex-start;
+
+    background: #242933;
+
+    color: white;
+
+}
+
+.message-outgoing {
+
+    align-self: flex-end;
+
+    background: var(--primary);
+
+    color: white;
+
+}
