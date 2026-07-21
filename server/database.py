@@ -64,13 +64,7 @@ class Database:
                     message_type TEXT NOT NULL,
                     content TEXT,
                     status TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-
-                    FOREIGN KEY(sender_id)
-                        REFERENCES devices(id),
-
-                    FOREIGN KEY(receiver_id)
-                        REFERENCES devices(id)
+                    created_at TEXT NOT NULL
                 );
 
                 CREATE TABLE IF NOT EXISTS files (
