@@ -12,7 +12,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
 
-from config import settings
+from server.config import settings
 
 
 class Database:
