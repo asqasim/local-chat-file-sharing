@@ -1,0 +1,51 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual Environment
+.venv/
+venv/
+env/
+
+# SQLite
+*.db
+*.db-journal
+*.sqlite3
+
+# Logs
+logs/
+*.log
+
+# Uploads
+server/uploads/*
+!server/uploads/.gitkeep
+
+server/thumbnails/*
+!server/thumbnails/.gitkeep
+
+# Temporary Files
+temp/*
+!temp/.gitkeep
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Python Cache
+.pytest_cache/
+.mypy_cache/
+
+# Build
+dist/
+build/
+
+# Environment
+.env
+
+# Node (future-proof)
+node_modules/
