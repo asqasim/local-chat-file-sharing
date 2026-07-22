@@ -9,6 +9,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter
 from fastapi import HTTPException
 from pydantic import BaseModel
+from pydantic import Field
 
 from server.database import database
 from server.websocket import manager
@@ -23,13 +24,22 @@ router = APIRouter(
 # Models
 # ==========================================================
 
-class DeviceCreate(BaseModel):
+class DeviceRegister(BaseModel):
 
-    device_id: str
+    device_id: str = Field(
+        min_length=3,
+        max_length=100,
+    )
 
-    name: str
+    name: str = Field(
+        min_length=1,
+        max_length=100,
+    )
 
-    platform: str
+    platform: str = Field(
+        min_length=1,
+        max_length=50,
+    )
 
     ip_address: str
 
@@ -40,12 +50,12 @@ class DeviceStatus(BaseModel):
 
 
 # ==========================================================
-# Register Device
+# Register / Update Device
 # ==========================================================
 
 @router.post("")
 async def register_device(
-    device: DeviceCreate,
+    device: DeviceRegister,
 ):
 
     now = datetime.now(
@@ -56,9 +66,9 @@ async def register_device(
 
         existing = connection.execute(
             """
-            SELECT id
+            SELECT device_id
             FROM devices
-            WHERE id = ?
+            WHERE device_id = ?
             """,
             (
                 device.device_id,
@@ -71,12 +81,20 @@ async def register_device(
                 """
                 UPDATE devices
                 SET
+
                     name = ?,
+
                     platform = ?,
+
                     ip_address = ?,
+
                     online = 1,
+
+                    paired = 1,
+
                     last_seen = ?
-                WHERE id = ?
+
+                WHERE device_id = ?
                 """,
                 (
                     device.name,
@@ -93,7 +111,7 @@ async def register_device(
                 """
                 INSERT INTO devices
                 (
-                    id,
+                    device_id,
                     name,
                     platform,
                     ip_address,
@@ -117,7 +135,7 @@ async def register_device(
 
     payload = {
 
-        "id": device.device_id,
+        "device_id": device.device_id,
 
         "name": device.name,
 
@@ -126,6 +144,8 @@ async def register_device(
         "ip_address": device.ip_address,
 
         "online": True,
+
+        "paired": True,
 
         "last_seen": now,
 
@@ -138,7 +158,11 @@ async def register_device(
         }
     )
 
-    return payload
+    return {
+        "success": True,
+        "message": "Device registered.",
+        "data": payload,
+    }
 
 
 # ==========================================================
@@ -153,7 +177,57 @@ async def list_devices():
         rows = connection.execute(
             """
             SELECT
-                id,
+
+                device_id,
+
+                name,
+
+                platform,
+
+                ip_address,
+
+                online,
+
+                paired,
+
+                last_seen
+
+            FROM devices
+
+            ORDER BY name
+            """
+        ).fetchall()
+
+    return {
+
+        "success": True,
+
+        "data": [
+
+            dict(row)
+
+            for row in rows
+
+        ]
+
+    }
+
+
+# ==========================================================
+# Get Device
+# ==========================================================
+
+@router.get("/{device_id}")
+async def get_device(
+    device_id: str,
+):
+
+    with database.connection() as connection:
+
+        row = connection.execute(
+            """
+            SELECT
+                device_id,
                 name,
                 platform,
                 ip_address,
@@ -161,103 +235,24 @@ async def list_devices():
                 paired,
                 last_seen
             FROM devices
-            ORDER BY name
-            """
-        ).fetchall()
-
-    return [
-        dict(row)
-        for row in rows
-    ]
-
-
-# ==========================================================
-# Update Status
-# ==========================================================
-
-@router.put("/{device_id}/status")
-async def update_status(
-    device_id: str,
-    status: DeviceStatus,
-):
-
-    now = datetime.now(
-        UTC
-    ).isoformat()
-
-    with database.connection() as connection:
-
-        cursor = connection.execute(
-            """
-            UPDATE devices
-            SET
-                online = ?,
-                last_seen = ?
-            WHERE id = ?
+            WHERE device_id = ?
             """,
             (
-                int(status.online),
-                now,
                 device_id,
             ),
-        )
+        ).fetchone()
 
-    if cursor.rowcount == 0:
+    if row is None:
 
         raise HTTPException(
             status_code=404,
             detail="Device not found.",
         )
 
-    await manager.broadcast(
-        {
-            "type": "device_status",
-            "device_id": device_id,
-            "online": status.online,
-        }
-    )
-
     return {
+
         "success": True,
-    }
 
+        "data": dict(row),
 
-# ==========================================================
-# Delete Device
-# ==========================================================
-
-@router.delete("/{device_id}")
-async def delete_device(
-    device_id: str,
-):
-
-    with database.connection() as connection:
-
-        cursor = connection.execute(
-            """
-            DELETE
-            FROM devices
-            WHERE id = ?
-            """,
-            (
-                device_id,
-            ),
-        )
-
-    if cursor.rowcount == 0:
-
-        raise HTTPException(
-            status_code=404,
-            detail="Device not found.",
-        )
-
-    await manager.broadcast(
-        {
-            "type": "device_removed",
-            "device_id": device_id,
-        }
-    )
-
-    return {
-        "success": True,
     }
