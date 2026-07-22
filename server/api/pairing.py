@@ -214,3 +214,168 @@ async def verify_pairing(
         "message": "Device paired successfully.",
         "data": payload,
     }
+
+
+# ==========================================================
+# Pairing Status
+# ==========================================================
+
+@router.get("/status")
+async def pairing_status():
+
+    now = datetime.now(
+        UTC
+    )
+
+    with database.connection() as connection:
+
+        session = connection.execute(
+            """
+            SELECT
+                code,
+                created_at,
+                expires_at,
+                verified
+            FROM pairing_sessions
+            ORDER BY created_at DESC
+            LIMIT 1
+            """
+        ).fetchone()
+
+    if session is None:
+
+        return {
+            "success": True,
+            "data": {
+                "active": False,
+            },
+        }
+
+    expires_at = datetime.fromisoformat(
+        session["expires_at"]
+    )
+
+    active = now <= expires_at
+
+    return {
+        "success": True,
+        "data": {
+
+            "active": active,
+
+            "code": session["code"],
+
+            "created_at": session["created_at"],
+
+            "expires_at": session["expires_at"],
+
+            "verified": bool(
+                session["verified"]
+            ),
+
+        },
+    }
+
+
+# ==========================================================
+# Cancel Pairing Session
+# ==========================================================
+
+@router.delete("/session")
+async def cancel_pairing_session():
+
+    with database.connection() as connection:
+
+        connection.execute(
+            """
+            DELETE FROM pairing_sessions
+            """
+        )
+
+    await manager.broadcast(
+        {
+            "type": "pairing_cancelled",
+        }
+    )
+
+    return {
+        "success": True,
+        "message": "Pairing session cancelled.",
+    }
+
+
+# ==========================================================
+# Unpair Device
+# ==========================================================
+
+@router.delete("/{device_id}")
+async def unpair_device(
+    device_id: str,
+):
+
+    with database.connection() as connection:
+
+        cursor = connection.execute(
+            """
+            UPDATE devices
+            SET
+                paired = 0,
+                online = 0
+            WHERE device_id = ?
+            """,
+            (
+                device_id,
+            ),
+        )
+
+    if cursor.rowcount == 0:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Device not found.",
+        )
+
+    await manager.broadcast(
+        {
+            "type": "device_unpaired",
+            "device_id": device_id,
+        }
+    )
+
+    return {
+        "success": True,
+        "message": "Device unpaired.",
+    }
+
+
+# ==========================================================
+# Cleanup Expired Sessions
+# ==========================================================
+
+@router.delete("/expired")
+async def cleanup_expired_sessions():
+
+    now = datetime.now(
+        UTC
+    ).isoformat()
+
+    with database.connection() as connection:
+
+        cursor = connection.execute(
+            """
+            DELETE
+            FROM pairing_sessions
+            WHERE expires_at < ?
+            """,
+            (
+                now,
+            ),
+        )
+
+    return {
+        "success": True,
+        "message": "Expired sessions removed.",
+        "data": {
+            "deleted": cursor.rowcount,
+        },
+    }
