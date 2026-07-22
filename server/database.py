@@ -5,23 +5,19 @@ SQLite Database Manager
 from __future__ import annotations
 
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
+
+
+DATABASE_DIR = Path(__file__).parent / "database"
+DATABASE_DIR.mkdir(parents=True, exist_ok=True)
+
+DATABASE_PATH = DATABASE_DIR / "localshare.db"
 
 
 class Database:
 
     def __init__(self) -> None:
-
-        self.database_dir = Path(__file__).parent / "database"
-
-        self.database_dir.mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
-        self.database_path = (
-            self.database_dir / "localshare.db"
-        )
 
         self.initialize()
 
@@ -29,27 +25,35 @@ class Database:
     # Connection
     # ==========================================================
 
-    def connection(self) -> sqlite3.Connection:
+    @contextmanager
+    def connection(self):
 
         connection = sqlite3.connect(
-            self.database_path
+            DATABASE_PATH,
+            check_same_thread=False,
         )
 
         connection.row_factory = sqlite3.Row
 
-        connection.execute(
-            "PRAGMA foreign_keys = ON;"
-        )
+        connection.execute("PRAGMA foreign_keys = ON;")
+        connection.execute("PRAGMA journal_mode = WAL;")
+        connection.execute("PRAGMA synchronous = NORMAL;")
 
-        connection.execute(
-            "PRAGMA journal_mode = WAL;"
-        )
+        try:
 
-        connection.execute(
-            "PRAGMA synchronous = NORMAL;"
-        )
+            yield connection
 
-        return connection
+            connection.commit()
+
+        except Exception:
+
+            connection.rollback()
+
+            raise
+
+        finally:
+
+            connection.close()
 
     # ==========================================================
     # Initialize
@@ -59,13 +63,13 @@ class Database:
 
         with self.connection() as connection:
 
-            self.create_messages_table(
-                connection
-            )
+            self.create_messages_table(connection)
 
-            self.create_files_table(
-                connection
-            )
+            self.create_files_table(connection)
+
+            self.create_devices_table(connection)
+
+            self.create_pairing_table(connection)
 
     # ==========================================================
     # Messages
@@ -74,13 +78,13 @@ class Database:
     def create_messages_table(
         self,
         connection: sqlite3.Connection,
-    ) -> None:
+    ):
 
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS messages (
 
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id TEXT PRIMARY KEY,
 
                 sender_id TEXT NOT NULL,
 
@@ -90,7 +94,7 @@ class Database:
 
                 content TEXT,
 
-                file_id INTEGER,
+                file_id TEXT,
 
                 status TEXT NOT NULL,
 
@@ -103,9 +107,24 @@ class Database:
         connection.execute(
             """
             CREATE INDEX IF NOT EXISTS
-            idx_messages_created_at
-
+            idx_messages_created
             ON messages(created_at)
+            """
+        )
+
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_messages_sender
+            ON messages(sender_id)
+            """
+        )
+
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_messages_receiver
+            ON messages(receiver_id)
             """
         )
 
@@ -116,15 +135,13 @@ class Database:
     def create_files_table(
         self,
         connection: sqlite3.Connection,
-    ) -> None:
+    ):
 
         connection.execute(
             """
             CREATE TABLE IF NOT EXISTS files (
 
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-                uuid TEXT UNIQUE NOT NULL,
+                id TEXT PRIMARY KEY,
 
                 file_name TEXT NOT NULL,
 
@@ -146,7 +163,6 @@ class Database:
             """
             CREATE INDEX IF NOT EXISTS
             idx_files_category
-
             ON files(category)
             """
         )
@@ -154,8 +170,74 @@ class Database:
         connection.execute(
             """
             CREATE INDEX IF NOT EXISTS
-            idx_files_created_at
-
+            idx_files_created
             ON files(created_at)
             """
         )
+
+    # ==========================================================
+    # Devices
+    # ==========================================================
+
+    def create_devices_table(
+        self,
+        connection: sqlite3.Connection,
+    ):
+
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS devices (
+
+                device_id TEXT PRIMARY KEY,
+
+                name TEXT NOT NULL,
+
+                platform TEXT NOT NULL,
+
+                ip_address TEXT,
+
+                online INTEGER NOT NULL DEFAULT 0,
+
+                paired INTEGER NOT NULL DEFAULT 0,
+
+                last_seen TEXT NOT NULL
+
+            )
+            """
+        )
+
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_devices_online
+            ON devices(online)
+            """
+        )
+
+    # ==========================================================
+    # Pairing Sessions
+    # ==========================================================
+
+    def create_pairing_table(
+        self,
+        connection: sqlite3.Connection,
+    ):
+
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS pairing_sessions (
+
+                code TEXT PRIMARY KEY,
+
+                created_at TEXT NOT NULL,
+
+                expires_at TEXT NOT NULL,
+
+                verified INTEGER NOT NULL DEFAULT 0
+
+            )
+            """
+        )
+
+
+database = Database()
