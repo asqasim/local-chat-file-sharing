@@ -5,11 +5,14 @@ Pairing API
 from __future__ import annotations
 
 import random
-from datetime import UTC, datetime, timedelta
+from datetime import UTC
+from datetime import datetime
+from datetime import timedelta
 
 from fastapi import APIRouter
 from fastapi import HTTPException
 from pydantic import BaseModel
+from pydantic import Field
 
 from server.database import database
 from server.websocket import manager
@@ -19,17 +22,23 @@ router = APIRouter(
     tags=["Pairing"],
 )
 
+PAIRING_DURATION = 300
 
-PAIRING_DURATION = 300  # 5 minutes
 
+# ==========================================================
+# Models
+# ==========================================================
 
-class PairRequest(BaseModel):
+class PairDeviceRequest(BaseModel):
 
-    code: str
+    code: str = Field(
+        min_length=6,
+        max_length=6,
+    )
 
     device_id: str
 
-    device_name: str
+    name: str
 
     platform: str
 
@@ -43,9 +52,16 @@ class PairRequest(BaseModel):
 @router.post("/generate")
 async def generate_pairing_code():
 
-    code = f"{random.randint(100000, 999999)}"
+    code = str(
+        random.randint(
+            100000,
+            999999,
+        )
+    )
 
-    created_at = datetime.now(UTC)
+    created_at = datetime.now(
+        UTC
+    )
 
     expires_at = created_at + timedelta(
         seconds=PAIRING_DURATION
@@ -66,7 +82,8 @@ async def generate_pairing_code():
                 expires_at,
                 verified
             )
-            VALUES (?, ?, ?, ?)
+            VALUES
+            (?, ?, ?, ?)
             """,
             (
                 code,
@@ -77,21 +94,26 @@ async def generate_pairing_code():
         )
 
     return {
-        "code": code,
-        "expires_in": PAIRING_DURATION,
+        "success": True,
+        "data": {
+            "code": code,
+            "expires_in": PAIRING_DURATION,
+        },
     }
 
 
 # ==========================================================
-# Verify Pairing Code
+# Pair Device
 # ==========================================================
 
 @router.post("/verify")
 async def verify_pairing(
-    request: PairRequest,
+    request: PairDeviceRequest,
 ):
 
-    now = datetime.now(UTC)
+    now = datetime.now(
+        UTC
+    )
 
     with database.connection() as connection:
 
@@ -99,11 +121,14 @@ async def verify_pairing(
             """
             SELECT
                 code,
-                expires_at
+                expires_at,
+                verified
             FROM pairing_sessions
             WHERE code = ?
             """,
-            (request.code,),
+            (
+                request.code,
+            ),
         ).fetchone()
 
         if session is None:
@@ -113,11 +138,11 @@ async def verify_pairing(
                 detail="Invalid pairing code.",
             )
 
-        expires = datetime.fromisoformat(
+        expires_at = datetime.fromisoformat(
             session["expires_at"]
         )
 
-        if now > expires:
+        if now > expires_at:
 
             raise HTTPException(
                 status_code=400,
@@ -141,7 +166,7 @@ async def verify_pairing(
             """,
             (
                 request.device_id,
-                request.device_name,
+                request.name,
                 request.platform,
                 request.ip_address,
                 1,
@@ -156,13 +181,25 @@ async def verify_pairing(
             SET verified = 1
             WHERE code = ?
             """,
-            (request.code,),
+            (
+                request.code,
+            ),
         )
 
     payload = {
+
         "device_id": request.device_id,
-        "name": request.device_name,
+
+        "name": request.name,
+
         "platform": request.platform,
+
+        "ip_address": request.ip_address,
+
+        "paired": True,
+
+        "online": True,
+
     }
 
     await manager.broadcast(
@@ -175,39 +212,5 @@ async def verify_pairing(
     return {
         "success": True,
         "message": "Device paired successfully.",
-    }
-
-
-# ==========================================================
-# Pairing Status
-# ==========================================================
-
-@router.get("/status")
-async def pairing_status():
-
-    with database.connection() as connection:
-
-        session = connection.execute(
-            """
-            SELECT
-                code,
-                expires_at,
-                verified
-            FROM pairing_sessions
-            ORDER BY created_at DESC
-            LIMIT 1
-            """
-        ).fetchone()
-
-    if session is None:
-
-        return {
-            "active": False
-        }
-
-    return {
-        "active": True,
-        "code": session["code"],
-        "expires_at": session["expires_at"],
-        "verified": bool(session["verified"]),
+        "data": payload,
     }
