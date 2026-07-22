@@ -1,88 +1,161 @@
 """
-SQLite database management.
-
-This module owns the application's SQLite connection and schema creation.
-Other modules should interact with the database only through this layer.
+SQLite Database Manager
 """
 
 from __future__ import annotations
 
 import sqlite3
-from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
-
-from server.config import settings
 
 
 class Database:
-    """SQLite database manager."""
 
-    def __init__(self, database_file: Path) -> None:
-        self._database_file = database_file
+    def __init__(self) -> None:
 
-    @contextmanager
-    def connection(self) -> Iterator[sqlite3.Connection]:
-        """Yield a configured SQLite connection."""
+        self.database_dir = Path(__file__).parent / "database"
 
-        connection = sqlite3.connect(self._database_file)
+        self.database_dir.mkdir(
+            parents=True,
+            exist_ok=True,
+        )
+
+        self.database_path = (
+            self.database_dir / "localshare.db"
+        )
+
+        self.initialize()
+
+    # ==========================================================
+    # Connection
+    # ==========================================================
+
+    def connection(self) -> sqlite3.Connection:
+
+        connection = sqlite3.connect(
+            self.database_path
+        )
+
         connection.row_factory = sqlite3.Row
 
-        connection.execute("PRAGMA foreign_keys = ON;")
-        connection.execute("PRAGMA journal_mode = WAL;")
+        connection.execute(
+            "PRAGMA foreign_keys = ON;"
+        )
 
-        try:
-            yield connection
-            connection.commit()
-        except Exception:
-            connection.rollback()
-            raise
-        finally:
-            connection.close()
+        connection.execute(
+            "PRAGMA journal_mode = WAL;"
+        )
+
+        connection.execute(
+            "PRAGMA synchronous = NORMAL;"
+        )
+
+        return connection
+
+    # ==========================================================
+    # Initialize
+    # ==========================================================
 
     def initialize(self) -> None:
-        """Create all required tables."""
 
         with self.connection() as connection:
-            cursor = connection.cursor()
 
-            cursor.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS devices (
-                    id TEXT PRIMARY KEY,
-                    name TEXT NOT NULL,
-                    platform TEXT NOT NULL,
-                    last_ip TEXT,
-                    paired_at TEXT NOT NULL,
-                    last_seen TEXT
-                );
-
-                CREATE TABLE IF NOT EXISTS messages (
-                    id TEXT PRIMARY KEY,
-                    sender_id TEXT NOT NULL,
-                    receiver_id TEXT NOT NULL,
-                    message_type TEXT NOT NULL,
-                    content TEXT,
-                    status TEXT NOT NULL,
-                    created_at TEXT NOT NULL
-                );
-
-                CREATE TABLE IF NOT EXISTS files (
-                    id TEXT PRIMARY KEY,
-                    message_id TEXT NOT NULL,
-                    file_name TEXT NOT NULL,
-                    stored_name TEXT NOT NULL,
-                    mime_type TEXT,
-                    file_size INTEGER NOT NULL,
-                    checksum TEXT,
-                    created_at TEXT NOT NULL,
-
-                    FOREIGN KEY(message_id)
-                        REFERENCES messages(id)
-                        ON DELETE CASCADE
-                );
-                """
+            self.create_messages_table(
+                connection
             )
 
+            self.create_files_table(
+                connection
+            )
 
-database = Database(settings.DATABASE_FILE)
+    # ==========================================================
+    # Messages
+    # ==========================================================
+
+    def create_messages_table(
+        self,
+        connection: sqlite3.Connection,
+    ) -> None:
+
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS messages (
+
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                sender_id TEXT NOT NULL,
+
+                receiver_id TEXT NOT NULL,
+
+                message_type TEXT NOT NULL,
+
+                content TEXT,
+
+                file_id INTEGER,
+
+                status TEXT NOT NULL,
+
+                created_at TEXT NOT NULL
+
+            )
+            """
+        )
+
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_messages_created_at
+
+            ON messages(created_at)
+            """
+        )
+
+    # ==========================================================
+    # Files
+    # ==========================================================
+
+    def create_files_table(
+        self,
+        connection: sqlite3.Connection,
+    ) -> None:
+
+        connection.execute(
+            """
+            CREATE TABLE IF NOT EXISTS files (
+
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+
+                uuid TEXT UNIQUE NOT NULL,
+
+                file_name TEXT NOT NULL,
+
+                stored_name TEXT NOT NULL,
+
+                category TEXT NOT NULL,
+
+                mime_type TEXT,
+
+                file_size INTEGER NOT NULL,
+
+                created_at TEXT NOT NULL
+
+            )
+            """
+        )
+
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_files_category
+
+            ON files(category)
+            """
+        )
+
+        connection.execute(
+            """
+            CREATE INDEX IF NOT EXISTS
+            idx_files_created_at
+
+            ON files(created_at)
+            """
+        )
