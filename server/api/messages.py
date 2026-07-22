@@ -205,3 +205,211 @@ async def send_message(
         "data": payload,
 
     }
+
+# ==========================================================
+# Get Message
+# ==========================================================
+
+@router.get("/{message_id}")
+async def get_message(
+    message_id: str,
+):
+
+    with database.connection() as connection:
+
+        row = connection.execute(
+            """
+            SELECT
+                id,
+                sender_id,
+                receiver_id,
+                message_type,
+                content,
+                file_id,
+                status,
+                created_at
+            FROM messages
+            WHERE id = ?
+            """,
+            (message_id,),
+        ).fetchone()
+
+    if row is None:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Message not found.",
+        )
+
+    return {
+        "success": True,
+        "data": dict(row),
+    }
+
+
+# ==========================================================
+# Update Status
+# ==========================================================
+
+class MessageStatusUpdate(BaseModel):
+
+    status: str
+
+
+VALID_STATUS = {
+    "queued",
+    "sent",
+    "delivered",
+    "read",
+}
+
+
+@router.put("/{message_id}/status")
+async def update_message_status(
+    message_id: str,
+    update: MessageStatusUpdate,
+):
+
+    if update.status not in VALID_STATUS:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid status.",
+        )
+
+    with database.connection() as connection:
+
+        cursor = connection.execute(
+            """
+            UPDATE messages
+            SET status = ?
+            WHERE id = ?
+            """,
+            (
+                update.status,
+                message_id,
+            ),
+        )
+
+    if cursor.rowcount == 0:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Message not found.",
+        )
+
+    await manager.broadcast(
+        {
+            "type": "message_status",
+            "message_id": message_id,
+            "status": update.status,
+        }
+    )
+
+    return {
+        "success": True,
+        "message": "Status updated.",
+    }
+
+
+# ==========================================================
+# Delete Message
+# ==========================================================
+
+@router.delete("/{message_id}")
+async def delete_message(
+    message_id: str,
+):
+
+    with database.connection() as connection:
+
+        cursor = connection.execute(
+            """
+            DELETE
+            FROM messages
+            WHERE id = ?
+            """,
+            (message_id,),
+        )
+
+    if cursor.rowcount == 0:
+
+        raise HTTPException(
+            status_code=404,
+            detail="Message not found.",
+        )
+
+    await manager.broadcast(
+        {
+            "type": "message_deleted",
+            "message_id": message_id,
+        }
+    )
+
+    return {
+        "success": True,
+        "message": "Message deleted.",
+    }
+
+
+# ==========================================================
+# Clear Conversation
+# ==========================================================
+
+@router.delete("")
+async def clear_messages():
+
+    with database.connection() as connection:
+
+        connection.execute(
+            "DELETE FROM messages"
+        )
+
+    await manager.broadcast(
+        {
+            "type": "messages_cleared",
+        }
+    )
+
+    return {
+        "success": True,
+        "message": "All messages deleted.",
+    }
+
+
+# ==========================================================
+# Search Messages
+# ==========================================================
+
+@router.get("/search/{query}")
+async def search_messages(
+    query: str,
+):
+
+    with database.connection() as connection:
+
+        rows = connection.execute(
+            """
+            SELECT
+                id,
+                sender_id,
+                receiver_id,
+                message_type,
+                content,
+                file_id,
+                status,
+                created_at
+            FROM messages
+            WHERE content LIKE ?
+            ORDER BY created_at DESC
+            """,
+            (f"%{query}%",),
+        ).fetchall()
+
+    return {
+        "success": True,
+        "data": [
+            dict(row)
+            for row in rows
+        ],
+    }
