@@ -14,7 +14,6 @@ from fastapi import APIRouter
 from fastapi import File
 from fastapi import HTTPException
 from fastapi import UploadFile
-from fastapi.responses import FileResponse
 
 from server.database import database
 from server.websocket import manager
@@ -28,26 +27,30 @@ router = APIRouter(
 # Storage
 # ==========================================================
 
-STORAGE_DIR = Path("storage")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-IMAGE_TYPES = {
+STORAGE_DIR = PROJECT_ROOT / "storage"
+
+IMAGE_EXTENSIONS = {
     ".png",
     ".jpg",
     ".jpeg",
     ".gif",
     ".bmp",
     ".webp",
+    ".svg",
 }
 
-VIDEO_TYPES = {
+VIDEO_EXTENSIONS = {
     ".mp4",
     ".mkv",
-    ".mov",
     ".avi",
+    ".mov",
     ".webm",
+    ".m4v",
 }
 
-DOCUMENT_TYPES = {
+DOCUMENT_EXTENSIONS = {
     ".pdf",
     ".doc",
     ".docx",
@@ -59,15 +62,16 @@ DOCUMENT_TYPES = {
     ".csv",
 }
 
-AUDIO_TYPES = {
+AUDIO_EXTENSIONS = {
     ".mp3",
     ".wav",
     ".aac",
     ".ogg",
     ".flac",
+    ".m4a",
 }
 
-ARCHIVE_TYPES = {
+ARCHIVE_EXTENSIONS = {
     ".zip",
     ".rar",
     ".7z",
@@ -80,19 +84,19 @@ def get_category(extension: str) -> str:
 
     extension = extension.lower()
 
-    if extension in IMAGE_TYPES:
+    if extension in IMAGE_EXTENSIONS:
         return "images"
 
-    if extension in VIDEO_TYPES:
+    if extension in VIDEO_EXTENSIONS:
         return "videos"
 
-    if extension in DOCUMENT_TYPES:
+    if extension in DOCUMENT_EXTENSIONS:
         return "documents"
 
-    if extension in AUDIO_TYPES:
+    if extension in AUDIO_EXTENSIONS:
         return "audio"
 
-    if extension in ARCHIVE_TYPES:
+    if extension in ARCHIVE_EXTENSIONS:
         return "archives"
 
     return "others"
@@ -114,22 +118,34 @@ async def upload_file(
             detail="Invalid filename.",
         )
 
-    extension = Path(file.filename).suffix
+    extension = Path(
+        file.filename
+    ).suffix.lower()
 
-    category = get_category(extension)
+    category = get_category(
+        extension
+    )
 
-    file_id = str(uuid.uuid4())
+    file_id = str(
+        uuid.uuid4()
+    )
 
-    stored_name = f"{file_id}{extension}"
+    stored_name = (
+        f"{file_id}{extension}"
+    )
 
-    folder = STORAGE_DIR / category
+    destination_folder = (
+        STORAGE_DIR / category
+    )
 
-    folder.mkdir(
+    destination_folder.mkdir(
         parents=True,
         exist_ok=True,
     )
 
-    destination = folder / stored_name
+    destination = (
+        destination_folder / stored_name
+    )
 
     with destination.open("wb") as buffer:
 
@@ -137,8 +153,6 @@ async def upload_file(
             file.file,
             buffer,
         )
-
-    file_size = destination.stat().st_size
 
     mime_type, _ = mimetypes.guess_type(
         destination
@@ -154,9 +168,10 @@ async def upload_file(
 
         "category": category,
 
-        "size": file_size,
+        "mime_type": mime_type
+        or "application/octet-stream",
 
-        "mime_type": mime_type,
+        "file_size": destination.stat().st_size,
 
         "created_at": datetime.now(
             UTC
@@ -187,7 +202,7 @@ async def upload_file(
                 payload["stored_name"],
                 payload["category"],
                 payload["mime_type"],
-                payload["size"],
+                payload["file_size"],
                 payload["created_at"],
             ),
         )
@@ -199,180 +214,8 @@ async def upload_file(
         }
     )
 
-    return payload
-
-
-
-
-
-    # ==========================================================
-# List Files
-# ==========================================================
-
-@router.get("")
-async def list_files():
-
-    with database.connection() as connection:
-
-        rows = connection.execute(
-            """
-            SELECT
-                id,
-                file_name,
-                stored_name,
-                category,
-                mime_type,
-                file_size,
-                created_at
-            FROM files
-            ORDER BY created_at DESC
-            """
-        ).fetchall()
-
-    return [dict(row) for row in rows]
-
-
-# ==========================================================
-# File Metadata
-# ==========================================================
-
-@router.get("/{file_id}")
-async def get_file(file_id: str):
-
-    with database.connection() as connection:
-
-        row = connection.execute(
-            """
-            SELECT
-                id,
-                file_name,
-                stored_name,
-                category,
-                mime_type,
-                file_size,
-                created_at
-            FROM files
-            WHERE id = ?
-            """,
-            (file_id,),
-        ).fetchone()
-
-    if row is None:
-
-        raise HTTPException(
-            status_code=404,
-            detail="File not found.",
-        )
-
-    return dict(row)
-
-
-# ==========================================================
-# Download
-# ==========================================================
-
-
-
-@router.get("/download/{file_id}")
-async def download_file(file_id: str):
-
-    with database.connection() as connection:
-
-        row = connection.execute(
-            """
-            SELECT
-                file_name,
-                stored_name,
-                category
-            FROM files
-            WHERE id = ?
-            """,
-            (file_id,),
-        ).fetchone()
-
-    if row is None:
-
-        raise HTTPException(
-            status_code=404,
-            detail="File not found.",
-        )
-
-    path = (
-        STORAGE_DIR
-        / row["category"]
-        / row["stored_name"]
-    )
-
-    if not path.exists():
-
-        raise HTTPException(
-            status_code=404,
-            detail="File missing on disk.",
-        )
-
-    return FileResponse(
-
-        path,
-
-        filename=row["file_name"],
-
-        media_type="application/octet-stream",
-
-    )
-
-
-# ==========================================================
-# Delete
-# ==========================================================
-
-@router.delete("/{file_id}")
-async def delete_file(file_id: str):
-
-    with database.connection() as connection:
-
-        row = connection.execute(
-            """
-            SELECT
-                stored_name,
-                category
-            FROM files
-            WHERE id = ?
-            """,
-            (file_id,),
-        ).fetchone()
-
-        if row is None:
-
-            raise HTTPException(
-                status_code=404,
-                detail="File not found.",
-            )
-
-        path = (
-            STORAGE_DIR
-            / row["category"]
-            / row["stored_name"]
-        )
-
-        if path.exists():
-
-            path.unlink()
-
-        connection.execute(
-            """
-            DELETE FROM files
-            WHERE id = ?
-            """,
-            (file_id,),
-        )
-
-    await manager.broadcast(
-        {
-            "type": "file_deleted",
-            "id": file_id,
-        }
-    )
-
     return {
         "success": True,
+        "message": "File uploaded.",
+        "data": payload,
     }
