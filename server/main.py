@@ -14,7 +14,7 @@ from server.database import database
 
 from server.api.health import router as health_router
 from server.api.messages import router as message_router
-from server.api.ws import router as websocket_router
+from server.api.pairing import router as websocket_router
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
