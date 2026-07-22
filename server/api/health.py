@@ -2,6 +2,8 @@
 Health API
 """
 
+from __future__ import annotations
+
 from datetime import UTC, datetime
 
 from fastapi import APIRouter
@@ -24,9 +26,12 @@ async def health():
     )
 
     return {
-        "status": "online",
-        "service": "LocalShare",
-        "version": "0.1.0",
-        "server_time": now.isoformat(),
-        "uptime_seconds": uptime,
+        "success": True,
+        "data": {
+            "status": "online",
+            "service": "LocalShare",
+            "version": "0.1.0",
+            "server_time": now.isoformat(),
+            "uptime_seconds": uptime,
+        },
     }

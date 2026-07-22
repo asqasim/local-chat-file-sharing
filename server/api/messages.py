@@ -5,10 +5,13 @@ Messages API
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC
+from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter
+from fastapi import HTTPException
 from pydantic import BaseModel
+from pydantic import Field
 
 from server.database import database
 from server.websocket import manager
@@ -19,53 +22,45 @@ router = APIRouter(
 )
 
 
+# ==========================================================
+# Models
+# ==========================================================
+
 class MessageCreate(BaseModel):
 
     sender_id: str
 
     receiver_id: str
 
-    content: str
+    content: str = Field(
+        min_length=1,
+        max_length=5000,
+    )
+
+    message_type: str = "text"
+
+    file_id: str | None = None
 
 
-@router.get("")
-async def get_messages():
+# ==========================================================
+# Helpers
+# ==========================================================
 
-    with database.connection() as connection:
-
-        rows = connection.execute(
-            """
-            SELECT
-                id,
-                sender_id,
-                receiver_id,
-                message_type,
-                content,
-                status,
-                created_at
-            FROM messages
-            ORDER BY created_at ASC
-            """
-        ).fetchall()
-
-    return [dict(row) for row in rows]
+VALID_MESSAGE_TYPES = {
+    "text",
+    "image",
+    "video",
+    "audio",
+    "document",
+    "archive",
+}
 
 
-@router.post("")
-async def create_message(
+def build_message_payload(
     message: MessageCreate,
 ):
 
-    text = message.content.strip()
-
-    if not text:
-
-        raise HTTPException(
-            status_code=400,
-            detail="Message cannot be empty.",
-        )
-
-    payload = {
+    return {
 
         "id": str(uuid.uuid4()),
 
@@ -73,9 +68,11 @@ async def create_message(
 
         "receiver_id": message.receiver_id,
 
-        "message_type": "text",
+        "message_type": message.message_type,
 
-        "content": text,
+        "content": message.content.strip(),
+
+        "file_id": message.file_id,
 
         "status": "sent",
 
@@ -84,6 +81,80 @@ async def create_message(
         ).isoformat(),
 
     }
+
+
+# ==========================================================
+# List Messages
+# ==========================================================
+
+@router.get("")
+async def list_messages():
+
+    with database.connection() as connection:
+
+        rows = connection.execute(
+            """
+            SELECT
+
+                id,
+
+                sender_id,
+
+                receiver_id,
+
+                message_type,
+
+                content,
+
+                file_id,
+
+                status,
+
+                created_at
+
+            FROM messages
+
+            ORDER BY created_at ASC
+            """
+        ).fetchall()
+
+    return {
+
+        "success": True,
+
+        "data": [
+
+            dict(row)
+
+            for row in rows
+
+        ]
+
+    }
+
+
+# ==========================================================
+# Send Message
+# ==========================================================
+
+@router.post("")
+async def send_message(
+    message: MessageCreate,
+):
+
+    if message.message_type not in VALID_MESSAGE_TYPES:
+
+        raise HTTPException(
+
+            status_code=400,
+
+            detail="Invalid message type.",
+
+        )
+
+    payload = build_message_payload(
+        message
+    )
 
     with database.connection() as connection:
 
@@ -96,11 +167,12 @@ async def create_message(
                 receiver_id,
                 message_type,
                 content,
+                file_id,
                 status,
                 created_at
             )
             VALUES
-            (?, ?, ?, ?, ?, ?, ?)
+            (?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 payload["id"],
@@ -108,6 +180,7 @@ async def create_message(
                 payload["receiver_id"],
                 payload["message_type"],
                 payload["content"],
+                payload["file_id"],
                 payload["status"],
                 payload["created_at"],
             ),
@@ -115,44 +188,20 @@ async def create_message(
 
     await manager.broadcast(
         {
+
             "type": "message_created",
+
             "message": payload,
-        }
-    )
 
-    return payload
-
-
-@router.delete("/{message_id}")
-async def delete_message(
-    message_id: str,
-):
-
-    with database.connection() as connection:
-
-        cursor = connection.execute(
-            """
-            DELETE
-            FROM messages
-            WHERE id = ?
-            """,
-            (message_id,),
-        )
-
-    if cursor.rowcount == 0:
-
-        raise HTTPException(
-            status_code=404,
-            detail="Message not found.",
-        )
-
-    await manager.broadcast(
-        {
-            "type": "message_deleted",
-            "id": message_id,
         }
     )
 
     return {
-        "success": True
+
+        "success": True,
+
+        "message": "Message sent.",
+
+        "data": payload,
+
     }
