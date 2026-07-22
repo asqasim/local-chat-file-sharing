@@ -1,22 +1,32 @@
 """
-Health check endpoints.
+Health API
 """
 
-from __future__ import annotations
+from datetime import UTC, datetime
 
 from fastapi import APIRouter
-from datetime import datetime, UTC
 
-router = APIRouter(prefix="/api", tags=["Health"])
+router = APIRouter(
+    prefix="/api/health",
+    tags=["Health"],
+)
+
+SERVER_STARTED = datetime.now(UTC)
 
 
-@router.get("/health")
-async def health() -> dict:
-    """Return server health information."""
+@router.get("")
+async def health():
+
+    now = datetime.now(UTC)
+
+    uptime = int(
+        (now - SERVER_STARTED).total_seconds()
+    )
 
     return {
         "status": "online",
-        "server": "Local Chat File Sharing",
+        "service": "LocalShare",
         "version": "0.1.0",
-        "timestamp": datetime.now(UTC).isoformat(),
+        "server_time": now.isoformat(),
+        "uptime_seconds": uptime,
     }
