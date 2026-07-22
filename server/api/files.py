@@ -14,6 +14,7 @@ from fastapi import APIRouter
 from fastapi import File
 from fastapi import HTTPException
 from fastapi import UploadFile
+from fastapi.responses import FileResponse
 
 from server.database import database
 from server.websocket import manager
@@ -199,3 +200,179 @@ async def upload_file(
     )
 
     return payload
+
+
+
+
+
+    # ==========================================================
+# List Files
+# ==========================================================
+
+@router.get("")
+async def list_files():
+
+    with database.connection() as connection:
+
+        rows = connection.execute(
+            """
+            SELECT
+                id,
+                file_name,
+                stored_name,
+                category,
+                mime_type,
+                file_size,
+                created_at
+            FROM files
+            ORDER BY created_at DESC
+            """
+        ).fetchall()
+
+    return [dict(row) for row in rows]
+
+
+# ==========================================================
+# File Metadata
+# ==========================================================
+
+@router.get("/{file_id}")
+async def get_file(file_id: str):
+
+    with database.connection() as connection:
+
+        row = connection.execute(
+            """
+            SELECT
+                id,
+                file_name,
+                stored_name,
+                category,
+                mime_type,
+                file_size,
+                created_at
+            FROM files
+            WHERE id = ?
+            """,
+            (file_id,),
+        ).fetchone()
+
+    if row is None:
+
+        raise HTTPException(
+            status_code=404,
+            detail="File not found.",
+        )
+
+    return dict(row)
+
+
+# ==========================================================
+# Download
+# ==========================================================
+
+
+
+@router.get("/download/{file_id}")
+async def download_file(file_id: str):
+
+    with database.connection() as connection:
+
+        row = connection.execute(
+            """
+            SELECT
+                file_name,
+                stored_name,
+                category
+            FROM files
+            WHERE id = ?
+            """,
+            (file_id,),
+        ).fetchone()
+
+    if row is None:
+
+        raise HTTPException(
+            status_code=404,
+            detail="File not found.",
+        )
+
+    path = (
+        STORAGE_DIR
+        / row["category"]
+        / row["stored_name"]
+    )
+
+    if not path.exists():
+
+        raise HTTPException(
+            status_code=404,
+            detail="File missing on disk.",
+        )
+
+    return FileResponse(
+
+        path,
+
+        filename=row["file_name"],
+
+        media_type="application/octet-stream",
+
+    )
+
+
+# ==========================================================
+# Delete
+# ==========================================================
+
+@router.delete("/{file_id}")
+async def delete_file(file_id: str):
+
+    with database.connection() as connection:
+
+        row = connection.execute(
+            """
+            SELECT
+                stored_name,
+                category
+            FROM files
+            WHERE id = ?
+            """,
+            (file_id,),
+        ).fetchone()
+
+        if row is None:
+
+            raise HTTPException(
+                status_code=404,
+                detail="File not found.",
+            )
+
+        path = (
+            STORAGE_DIR
+            / row["category"]
+            / row["stored_name"]
+        )
+
+        if path.exists():
+
+            path.unlink()
+
+        connection.execute(
+            """
+            DELETE FROM files
+            WHERE id = ?
+            """,
+            (file_id,),
+        )
+
+    await manager.broadcast(
+        {
+            "type": "file_deleted",
+            "id": file_id,
+        }
+    )
+
+    return {
+        "success": True,
+    }
