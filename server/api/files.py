@@ -219,3 +219,280 @@ async def upload_file(
         "message": "File uploaded.",
         "data": payload,
     }
+
+
+from fastapi.responses import FileResponse
+
+
+# ==========================================================
+# List Files
+# ==========================================================
+
+@router.get("")
+async def list_files():
+
+    with database.connection() as connection:
+
+        rows = connection.execute(
+            """
+            SELECT
+                id,
+                file_name,
+                stored_name,
+                category,
+                mime_type,
+                file_size,
+                created_at
+            FROM files
+            ORDER BY created_at DESC
+            """
+        ).fetchall()
+
+    return {
+        "success": True,
+        "data": [
+            dict(row)
+            for row in rows
+        ],
+    }
+
+
+# ==========================================================
+# Get File Metadata
+# ==========================================================
+
+@router.get("/{file_id}")
+async def get_file(
+    file_id: str,
+):
+
+    with database.connection() as connection:
+
+        row = connection.execute(
+            """
+            SELECT
+                id,
+                file_name,
+                stored_name,
+                category,
+                mime_type,
+                file_size,
+                created_at
+            FROM files
+            WHERE id = ?
+            """,
+            (file_id,),
+        ).fetchone()
+
+    if row is None:
+
+        raise HTTPException(
+            status_code=404,
+            detail="File not found.",
+        )
+
+    return {
+        "success": True,
+        "data": dict(row),
+    }
+
+
+# ==========================================================
+# Download
+# ==========================================================
+
+@router.get("/download/{file_id}")
+async def download_file(
+    file_id: str,
+):
+
+    with database.connection() as connection:
+
+        row = connection.execute(
+            """
+            SELECT
+                file_name,
+                stored_name,
+                category,
+                mime_type
+            FROM files
+            WHERE id = ?
+            """,
+            (file_id,),
+        ).fetchone()
+
+    if row is None:
+
+        raise HTTPException(
+            status_code=404,
+            detail="File not found.",
+        )
+
+    path = (
+        STORAGE_DIR
+        / row["category"]
+        / row["stored_name"]
+    )
+
+    if not path.exists():
+
+        raise HTTPException(
+            status_code=404,
+            detail="File missing on disk.",
+        )
+
+    return FileResponse(
+        path=path,
+        filename=row["file_name"],
+        media_type=row["mime_type"],
+    )
+
+
+# ==========================================================
+# Delete File
+# ==========================================================
+
+@router.delete("/{file_id}")
+async def delete_file(
+    file_id: str,
+):
+
+    with database.connection() as connection:
+
+        row = connection.execute(
+            """
+            SELECT
+                stored_name,
+                category
+            FROM files
+            WHERE id = ?
+            """,
+            (file_id,),
+        ).fetchone()
+
+        if row is None:
+
+            raise HTTPException(
+                status_code=404,
+                detail="File not found.",
+            )
+
+        path = (
+            STORAGE_DIR
+            / row["category"]
+            / row["stored_name"]
+        )
+
+        if path.exists():
+
+            path.unlink()
+
+        connection.execute(
+            """
+            DELETE FROM files
+            WHERE id = ?
+            """,
+            (file_id,),
+        )
+
+    await manager.broadcast(
+        {
+            "type": "file_deleted",
+            "file_id": file_id,
+        }
+    )
+
+    return {
+        "success": True,
+        "message": "File deleted.",
+    }
+
+
+# ==========================================================
+# Files by Category
+# ==========================================================
+
+@router.get("/category/{category}")
+async def files_by_category(
+    category: str,
+):
+
+    valid_categories = {
+        "images",
+        "videos",
+        "documents",
+        "audio",
+        "archives",
+        "others",
+    }
+
+    if category not in valid_categories:
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid category.",
+        )
+
+    with database.connection() as connection:
+
+        rows = connection.execute(
+            """
+            SELECT
+                id,
+                file_name,
+                stored_name,
+                category,
+                mime_type,
+                file_size,
+                created_at
+            FROM files
+            WHERE category = ?
+            ORDER BY created_at DESC
+            """,
+            (category,),
+        ).fetchall()
+
+    return {
+        "success": True,
+        "data": [
+            dict(row)
+            for row in rows
+        ],
+    }
+
+
+# ==========================================================
+# Search Files
+# ==========================================================
+
+@router.get("/search/{query}")
+async def search_files(
+    query: str,
+):
+
+    with database.connection() as connection:
+
+        rows = connection.execute(
+            """
+            SELECT
+                id,
+                file_name,
+                stored_name,
+                category,
+                mime_type,
+                file_size,
+                created_at
+            FROM files
+            WHERE file_name LIKE ?
+            ORDER BY created_at DESC
+            """,
+            (f"%{query}%",),
+        ).fetchall()
+
+    return {
+        "success": True,
+        "data": [
+            dict(row)
+            for row in rows
+        ],
+    }
