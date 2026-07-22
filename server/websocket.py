@@ -1,37 +1,193 @@
 """
-WebSocket connection manager.
+WebSocket Manager
 """
 
 from __future__ import annotations
 
+import asyncio
+import json
+from datetime import UTC
+from datetime import datetime
+
 from fastapi import WebSocket
+from fastapi import WebSocketDisconnect
 
 
 class ConnectionManager:
-    """Manage connected WebSocket clients."""
 
-    def __init__(self) -> None:
-        self._connections: list[WebSocket] = []
+    def __init__(self):
 
-    async def connect(self, websocket: WebSocket) -> None:
+        self.connections: dict[str, WebSocket] = {}
+
+        self.last_seen: dict[str, str] = {}
+
+    # ==========================================================
+    # Connect
+    # ==========================================================
+
+    async def connect(
+        self,
+        websocket: WebSocket,
+        device_id: str,
+    ):
+
         await websocket.accept()
-        self._connections.append(websocket)
 
-    def disconnect(self, websocket: WebSocket) -> None:
-        if websocket in self._connections:
-            self._connections.remove(websocket)
+        self.connections[
+            device_id
+        ] = websocket
 
-    async def broadcast(self, message: dict) -> None:
-        disconnected: list[WebSocket] = []
+        self.last_seen[
+            device_id
+        ] = datetime.now(
+            UTC
+        ).isoformat()
 
-        for connection in self._connections:
+        await self.broadcast(
+            {
+                "type": "device_connected",
+                "device_id": device_id,
+            }
+        )
+
+    # ==========================================================
+    # Disconnect
+    # ==========================================================
+
+    async def disconnect(
+        self,
+        device_id: str,
+    ):
+
+        self.connections.pop(
+            device_id,
+            None,
+        )
+
+        self.last_seen[
+            device_id
+        ] = datetime.now(
+            UTC
+        ).isoformat()
+
+        await self.broadcast(
+            {
+                "type": "device_disconnected",
+                "device_id": device_id,
+            }
+        )
+
+    # ==========================================================
+    # Send
+    # ==========================================================
+
+    async def send(
+        self,
+        device_id: str,
+        payload: dict,
+    ):
+
+        websocket = self.connections.get(
+            device_id
+        )
+
+        if websocket is None:
+
+            return False
+
+        try:
+
+            await websocket.send_json(
+                payload
+            )
+
+            return True
+
+        except Exception:
+
+            await self.disconnect(
+                device_id
+            )
+
+            return False
+
+    # ==========================================================
+    # Broadcast
+    # ==========================================================
+
+    async def broadcast(
+        self,
+        payload: dict,
+    ):
+
+        disconnected = []
+
+        for (
+            device_id,
+            websocket,
+        ) in self.connections.items():
+
             try:
-                await connection.send_json(message)
+
+                await websocket.send_json(
+                    payload
+                )
+
             except Exception:
-                disconnected.append(connection)
 
-        for connection in disconnected:
-            self.disconnect(connection)
+                disconnected.append(
+                    device_id
+                )
 
+        for device_id in disconnected:
 
-manager = ConnectionManager()
+            await self.disconnect(
+                device_id
+            )
+
+    # ==========================================================
+    # Receive Loop
+    # ==========================================================
+
+    async def listen(
+        self,
+        websocket: WebSocket,
+        device_id: str,
+    ):
+
+        try:
+
+            while True:
+
+                data = await websocket.receive_text()
+
+                self.last_seen[
+                    device_id
+                ] = datetime.now(
+                    UTC
+                ).isoformat()
+
+                try:
+
+                    payload = json.loads(
+                        data
+                    )
+
+                except Exception:
+
+                    continue
+
+                payload.setdefault(
+                    "device_id",
+                    device_id,
+                )
+
+                await self.broadcast(
+                    payload
+                )
+
+        except WebSocketDisconnect:
+
+            await self.disconnect(
+                device_id
+            )
